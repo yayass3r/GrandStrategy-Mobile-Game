@@ -7,6 +7,7 @@ import {
   GameState, City, Army, GovernorData, GovernorType,
   GameNotification, BattleResult, BuildingType,
   TechId, EventNotification,
+  Faction, DiplomaticAction, VictoryState, FactionPersonality, DiplomaticStatus,
 } from '@/game/types';
 import {
   generateWorld, processTurn, createGovernor as engineCreateGovernor,
@@ -16,10 +17,13 @@ import {
   generateAvailableGovernors as engineGenerateAvailableGovernors,
   calculateBudget,
   updatePopulationStatus,
-  createDefaultComposition,
+ createDefaultComposition,
   startBuilding as engineStartBuilding,
   startResearch as engineStartResearch,
   applyEventEffects as engineApplyEventEffects,
+  generateFactions, processFactionAI,
+  handleDiplomaticAction as engineHandleDiplomaticAction,
+  calculateVictoryProgress,
 } from '@/game/engine';
 
 export interface GameStore extends GameState {
@@ -44,6 +48,9 @@ export interface GameStore extends GameState {
   startTechResearch: (techId: TechId) => void;
   handleEventChoice: (choiceId: string) => void;
   dismissEvent: () => void;
+  handleDiplomaticChoice: (actionId: string, choiceId: string) => void;
+  dismissDiplomacy: () => void;
+  dismissVictory: () => void;
 }
 
 const initialState: GameState = {
@@ -67,6 +74,11 @@ const initialState: GameState = {
   currentResearch: null,
   totalResearchPoints: 0,
   researchPerTurn: 0,
+  factions: [],
+  diplomaticActions: [],
+  victory: { dominationProgress: 0, culturalProgress: 0, economicProgress: 0, victoryAchieved: false, victoryType: null, victoryMessage: '' },
+  showDiplomacyModal: null,
+  showVictoryScreen: false,
 };
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -75,9 +87,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   startGame: () => {
     const { cities, armies } = generateWorld();
+    const factions = generateFactions(cities);
     set({
       cities,
       armies,
+      factions,
       turn: 1,
       treasury: 100,
       gameStarted: true,
@@ -94,6 +108,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       totalResearchPoints: 0,
       researchPerTurn: 0,
       activeEvent: null,
+      diplomaticActions: [],
+      victory: { dominationProgress: 0, culturalProgress: 0, economicProgress: 0, victoryAchieved: false, victoryType: null, victoryMessage: '' },
+      showDiplomacyModal: null,
+      showVictoryScreen: false,
     });
   },
 
@@ -131,10 +149,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
       activeEvent = choiceNotification as EventNotification;
     }
 
+    // Process faction AI
+    const { factions: updatedFactions, notifications: factionNotifs, diplomaticActions } = processFactionAI(newState);
+    newState = { ...newState, factions: updatedFactions, notifications: [...factionNotifs, ...newState.notifications].slice(0, 50) };
+
+    // Calculate victory progress
+    const victory = calculateVictoryProgress(newState);
+
+    // Check for diplomatic actions or victory
+    const showDiplomacyModal = diplomaticActions.length > 0 ? diplomaticActions[0] : null;
+    const showVictoryScreen = victory.victoryAchieved;
+
     set({
       ...newState,
-      gameOver,
+      gameOver: victory.victoryAchieved ? true : gameOver,
       activeEvent,
+      diplomaticActions: [...(newState.diplomaticActions || []), ...diplomaticActions],
+      victory,
+      showDiplomacyModal,
+      showVictoryScreen,
       // Refresh available governors every 5 turns
       availableGovernors: newState.turn % 5 === 0
         ? engineGenerateAvailableGovernors()
@@ -211,6 +244,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   dismissEvent: () => {
     set({ activeEvent: null });
+  },
+
+  handleDiplomaticChoice: (actionId: string, choiceId: string) => {
+    const state = get();
+    const updatedState = engineHandleDiplomaticAction(state, actionId, choiceId);
+    set(updatedState);
+  },
+
+  dismissDiplomacy: () => {
+    set({ showDiplomacyModal: null, diplomaticActions: get().diplomaticActions.slice(1) });
+  },
+
+  dismissVictory: () => {
+    set({ showVictoryScreen: false });
   },
 
   selectCity: (cityId: string | null) => {

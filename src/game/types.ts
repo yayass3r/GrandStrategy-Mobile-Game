@@ -198,6 +198,11 @@ export interface GameState {
   currentResearch: { techId: TechId; progress: number } | null;
   totalResearchPoints: number;
   researchPerTurn: number;
+  factions: Faction[];
+  diplomaticActions: DiplomaticAction[];
+  victory: VictoryState;
+  showDiplomacyModal: DiplomaticAction | null;
+  showVictoryScreen: boolean;
 }
 
 // ==================== COMBAT SYSTEM ====================
@@ -872,6 +877,94 @@ export const GAME_EVENTS: Record<EventId, GameEvent> = {
       ]},
     ],
   },
+};
+
+// ==================== FACTIONS & DIPLOMACY ====================
+
+export enum FactionPersonality {
+  Aggressive = 'aggressive',
+  Defensive = 'defensive',
+  Economic = 'economic',
+  Diplomatic = 'diplomatic',
+  Balanced = 'balanced',
+}
+
+export enum DiplomaticStatus {
+  Unknown = 'unknown',
+  Neutral = 'neutral',
+  Peace = 'peace',
+  Allied = 'allied',
+  War = 'war',
+  Vassal = 'vassal',
+}
+
+export enum VictoryType {
+  Domination = 'domination',
+  Cultural = 'cultural',
+  Economic = 'economic',
+}
+
+export interface Faction {
+  id: string;
+  name: string;
+  color: string;
+  personality: FactionPersonality;
+  treasury: number;
+  armyPower: number;
+  armyCount: number;
+  cityCount: number;
+  cities: string[];
+  capitalId: string;
+  researchedTechCount: number;
+  relationWithPlayer: number;
+  diplomaticStatus: DiplomaticStatus;
+  isAtWar: boolean;
+  turnsSinceLastAction: number;
+  aggressionLevel: number;
+}
+
+export interface DiplomaticAction {
+  id: string;
+  turn: number;
+  factionId: string;
+  type: 'declare_war' | 'propose_peace' | 'demand_tribute' | 'trade_deal' | 'threaten' | 'praise';
+  message: string;
+  effects?: { type: string; value: number; description: string }[];
+  choices?: { id: string; label: string; description: string; effects: { type: string; value: number; description: string }[] }[];
+}
+
+export interface VictoryState {
+  dominationProgress: number;
+  culturalProgress: number;
+  economicProgress: number;
+  victoryAchieved: boolean;
+  victoryType: VictoryType | null;
+  victoryMessage: string;
+}
+
+export const FACTION_NAMES = [
+  'العباسيون', 'الفاطميون', 'الأمويون', 'المرابطون', 'الزنكيون', 'الأيوبيون',
+];
+
+export const FACTION_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#9b59b6', '#e67e22', '#1abc9c'];
+
+export const PERSONALITY_CONFIG: Record<FactionPersonality, {
+  label: string; icon: string; aggressionBase: number; econBonus: number; milBonus: number;
+}> = {
+  [FactionPersonality.Aggressive]: { label: 'عدواني', icon: '🔥', aggressionBase: 70, econBonus: 0, milBonus: 30 },
+  [FactionPersonality.Defensive]: { label: 'دفاعي', icon: '🛡️', aggressionBase: 20, econBonus: 10, milBonus: 20 },
+  [FactionPersonality.Economic]: { label: 'تجاري', icon: '💰', aggressionBase: 25, econBonus: 30, milBonus: 5 },
+  [FactionPersonality.Diplomatic]: { label: 'دبلوماسي', icon: '🤝', aggressionBase: 15, econBonus: 15, milBonus: 10 },
+  [FactionPersonality.Balanced]: { label: 'متوازن', icon: '⚖️', aggressionBase: 40, econBonus: 15, milBonus: 15 },
+};
+
+export const DIPLOMATIC_STATUS_LABELS: Record<DiplomaticStatus, string> = {
+  [DiplomaticStatus.Unknown]: 'مجهول',
+  [DiplomaticStatus.Neutral]: 'محايد',
+  [DiplomaticStatus.Peace]: 'سلام',
+  [DiplomaticStatus.Allied]: 'حليف',
+  [DiplomaticStatus.War]: 'حرب',
+  [DiplomaticStatus.Vassal]: 'تابع',
 };
 
 // ---- Helper Types ----

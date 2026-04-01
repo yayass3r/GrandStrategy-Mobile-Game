@@ -13,6 +13,9 @@ import {
   TechId, TechDef, TECH_DEFS, ResearchedTech,
   EventId, EventCategory, EventEffect, EventNotification,
   GAME_EVENTS,
+  FactionPersonality, DiplomaticStatus, VictoryType,
+  Faction, DiplomaticAction, VictoryState,
+  FACTION_NAMES, FACTION_COLORS, PERSONALITY_CONFIG, DIPLOMATIC_STATUS_LABELS,
 } from './types';
 
 // ---- Utilities ----
@@ -1726,4 +1729,240 @@ export function getRebellionRisk(loyalty: number): string {
   if (loyalty >= 20) return 'متوسط';
   if (loyalty >= 10) return 'مرتفع';
   return 'تمرد!';
+}
+
+// ==================== FACTIONS & DIPLOMACY ====================
+
+export function generateFactions(cities: City[]): Faction[] {
+  const neutralCities = cities.filter(c => !c.isCapital);
+  const numFactions = 3;
+  const shuffledNames = [...FACTION_NAMES].sort(() => Math.random() - 0.5);
+  const shuffledColors = [...FACTION_COLORS].sort(() => Math.random() - 0.5);
+  const shuffledCities = [...neutralCities].sort(() => Math.random() - 0.5);
+  const personalities = Object.values(FactionPersonality).sort(() => Math.random() - 0.5);
+  
+  const citiesPerFaction = Math.floor(shuffledCities.length / numFactions);
+  const factions: Faction[] = [];
+  
+  for (let i = 0; i < numFactions; i++) {
+    const startIdx = i * citiesPerFaction;
+    const endIdx = i === numFactions - 1 ? shuffledCities.length : startIdx + citiesPerFaction;
+    const factionCities = shuffledCities.slice(startIdx, endIdx);
+    
+    if (factionCities.length === 0) continue;
+    
+    const personality = personalities[i % personalities.length];
+    const config = PERSONALITY_CONFIG[personality];
+    
+    const totalPop = factionCities.reduce((sum, c) => sum + c.population.adults, 0);
+    const totalArmy = factionCities.reduce((sum, c) => sum + c.soldierCount, 0);
+    
+    factions.push({
+      id: `faction_${i}`,
+      name: shuffledNames[i],
+      color: shuffledColors[i],
+      personality,
+      treasury: 200 + Math.floor(Math.random() * 300),
+      armyPower: Math.floor(totalArmy * (1 + config.milBonus / 100)),
+      armyCount: totalArmy,
+      cityCount: factionCities.length,
+      cities: factionCities.map(c => c.id),
+      capitalId: factionCities[0]?.id || '',
+      researchedTechCount: Math.floor(Math.random() * 5),
+      relationWithPlayer: Math.floor(Math.random() * 30) - 15,
+      diplomaticStatus: DiplomaticStatus.Neutral,
+      isAtWar: false,
+      turnsSinceLastAction: 0,
+      aggressionLevel: config.aggressionBase + Math.floor(Math.random() * 20),
+    });
+  }
+  
+  return factions;
+}
+
+export function processFactionAI(state: GameState): { factions: Faction[]; notifications: GameNotification[]; diplomaticActions: DiplomaticAction[] } {
+  let factions = state.factions.map(f => ({ ...f, turnsSinceLastAction: f.turnsSinceLastAction + 1 }));
+  const notifications: GameNotification[] = [];
+  const diplomaticActions: DiplomaticAction[] = [];
+  
+  for (const faction of factions) {
+    const config = PERSONALITY_CONFIG[faction.personality];
+    
+    // Grow faction power each turn
+    const growthRate = 0.02 + config.econBonus / 200;
+    faction.armyPower = Math.floor(faction.armyPower * (1 + growthRate));
+    faction.armyCount = Math.floor(faction.armyPower / 10);
+    faction.treasury += Math.floor(faction.cityCount * 5 * (1 + config.econBonus / 100));
+    faction.researchedTechCount += Math.random() < 0.1 ? 1 : 0;
+    
+    // AI Decision: declare war or diplomacy
+    if (faction.turnsSinceLastAction >= 8) {
+      const shouldAttack = Math.random() * 100 < faction.aggressionLevel;
+      
+      if (shouldAttack && !faction.isAtWar) {
+        faction.isAtWar = true;
+        faction.diplomaticStatus = DiplomaticStatus.War;
+        faction.relationWithPlayer = Math.max(-100, faction.relationWithPlayer - 40);
+        notifications.push({
+          id: uuid(),
+          turn: state.turn + 1,
+          message: `⚔️ ${faction.name} أعلن الحرب عليك!`,
+          category: 'military',
+          timestamp: Date.now(),
+        });
+        faction.turnsSinceLastAction = 0;
+      } else if (!shouldAttack && !faction.isAtWar && faction.relationWithPlayer > 20) {
+        const actionType = Math.random() < 0.5 ? 'propose_peace' : 'trade_deal';
+        const action: DiplomaticAction = {
+          id: uuid(),
+          turn: state.turn + 1,
+          factionId: faction.id,
+          type: actionType as DiplomaticAction['type'],
+          message: actionType === 'propose_peace' 
+            ? `🤝 ${faction.name} يعرض معاهدة سلام` 
+            : `💰 ${faction.name} يعرض صفقة تجارية`,
+          effects: actionType === 'trade_deal' ? [{ type: 'gold', value: 100, description: '+100 ذهب' }] : [],
+        };
+        diplomaticActions.push(action);
+        faction.turnsSinceLastAction = 0;
+      }
+    }
+    
+    // War damage: AI at war may damage player cities
+    if (faction.isAtWar && Math.random() < 0.15) {
+      const playerCities = state.cities;
+      if (playerCities.length > 0) {
+        const targetCity = playerCities[Math.floor(Math.random() * playerCities.length)];
+        notifications.push({
+          id: uuid(),
+          turn: state.turn + 1,
+          message: `🗡️ جيش ${faction.name} يهاجم ${targetCity.name}! خسائر في الحامية`,
+          category: 'military',
+          timestamp: Date.now(),
+        });
+      }
+    }
+    
+    // Improve relations slowly if not at war
+    if (!faction.isAtWar) {
+      faction.relationWithPlayer = Math.min(100, faction.relationWithPlayer + Math.floor(Math.random() * 3));
+    }
+    
+    // Update diplomatic status based on relations
+    if (faction.relationWithPlayer >= 60) faction.diplomaticStatus = DiplomaticStatus.Allied;
+    else if (faction.relationWithPlayer >= 20) faction.diplomaticStatus = DiplomaticStatus.Peace;
+    else if (faction.relationWithPlayer >= -20) faction.diplomaticStatus = DiplomaticStatus.Neutral;
+    else faction.diplomaticStatus = DiplomaticStatus.War;
+    
+    if (faction.diplomaticStatus === DiplomaticStatus.War && !faction.isAtWar) {
+      faction.isAtWar = true;
+    }
+    if (faction.diplomaticStatus !== DiplomaticStatus.War) {
+      faction.isAtWar = false;
+    }
+  }
+  
+  return { factions, notifications, diplomaticActions };
+}
+
+export function handleDiplomaticAction(state: GameState, actionId: string, choiceId: string): GameState {
+  const action = state.diplomaticActions.find(a => a.id === actionId);
+  if (!action) return state;
+  
+  const factions = [...state.factions];
+  const notifications: GameNotification[] = [...state.notifications];
+  const factionIdx = factions.findIndex(f => f.id === action.factionId);
+  if (factionIdx < 0) return state;
+  
+  const faction = { ...factions[factionIdx] };
+  const accepted = choiceId === 'accept';
+  let newTreasury = state.treasury;
+  
+  switch (action.type) {
+    case 'propose_peace':
+      if (accepted) {
+        faction.isAtWar = false;
+        faction.diplomaticStatus = DiplomaticStatus.Peace;
+        faction.relationWithPlayer = Math.min(100, faction.relationWithPlayer + 20);
+        notifications.push({
+          id: uuid(), turn: state.turn, message: `✅ تم إبرام معاهدة سلام مع ${faction.name}`,
+          category: 'political', timestamp: Date.now(),
+        });
+      } else {
+        faction.relationWithPlayer = Math.max(-100, faction.relationWithPlayer - 15);
+        notifications.push({
+          id: uuid(), turn: state.turn, message: `❌ رفضت معاهدة سلام مع ${faction.name}`,
+          category: 'political', timestamp: Date.now(),
+        });
+      }
+      break;
+    case 'trade_deal':
+      if (accepted) {
+        faction.relationWithPlayer = Math.min(100, faction.relationWithPlayer + 10);
+        newTreasury += 100;
+        notifications.push({
+          id: uuid(), turn: state.turn, message: `💰 صفقة تجارية مع ${faction.name}: +100 ذهب`,
+          category: 'economic', timestamp: Date.now(),
+        });
+      } else {
+        notifications.push({
+          id: uuid(), turn: state.turn, message: `❌ رفضت صفقة ${faction.name}`,
+          category: 'economic', timestamp: Date.now(),
+        });
+      }
+      break;
+    default:
+      break;
+  }
+  
+  factions[factionIdx] = faction;
+  
+  return {
+    ...state,
+    factions,
+    notifications,
+    diplomaticActions: state.diplomaticActions.filter(a => a.id !== actionId),
+    showDiplomacyModal: null,
+    treasury: newTreasury,
+  };
+}
+
+export function calculateVictoryProgress(state: GameState): VictoryState {
+  const totalCities = state.cities.length;
+  const playerCities = state.cities.filter(c => {
+    return !state.factions.some(f => f.cities.includes(c.id));
+  }).length;
+  const dominationProgress = totalCities > 0 ? Math.floor((playerCities / totalCities) * 100) : 0;
+  
+  const culturalProgress = Math.floor((state.researchedTechs.length / 24) * 100);
+  
+  const economicProgress = Math.min(100, Math.floor(state.treasury / 5000 * 100));
+  
+  let victoryAchieved = false;
+  let victoryType: VictoryType | null = null;
+  let victoryMessage = '';
+  
+  if (dominationProgress >= 80) {
+    victoryAchieved = true;
+    victoryType = VictoryType.Domination;
+    victoryMessage = '🏆 نصر بالسيطرة! لقد سيطرت على معظم مدن العالم!';
+  } else if (culturalProgress >= 100) {
+    victoryAchieved = true;
+    victoryType = VictoryType.Cultural;
+    victoryMessage = '🏆 نصر حضاري! لقد اكتشفت جميع التقنيات!';
+  } else if (economicProgress >= 100) {
+    victoryAchieved = true;
+    victoryType = VictoryType.Economic;
+    victoryMessage = '🏆 نصر اقتصادي! خزينتك تفيض بالذهب!';
+  }
+  
+  // Defeat condition
+  const capital = state.cities.find(c => c.isCapital);
+  if (!capital || state.treasury < -500) {
+    victoryAchieved = true;
+    victoryType = null;
+    victoryMessage = '💀 هزيمة! لقد سقطت إمبراطوريتك!';
+  }
+  
+  return { dominationProgress, culturalProgress, economicProgress, victoryAchieved, victoryType, victoryMessage };
 }

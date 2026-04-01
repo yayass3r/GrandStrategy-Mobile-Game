@@ -8,6 +8,8 @@ import {
   type City, type GovernorData, type Army, type GameNotification, type BattleResult,
   UnitType, TechBranch, TechId, TECH_DEFS,
   type EventNotification, type EventChoice,
+  FactionPersonality, DiplomaticStatus, VictoryType,
+  PERSONALITY_CONFIG, DIPLOMATIC_STATUS_LABELS,
 } from '@/game/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -22,7 +24,7 @@ import {
   Users, Heart, Star, MapPin, ChevronRight, Play, RotateCcw,
   AlertTriangle, Bell, Castle, UserPlus, UserMinus, ArrowRightLeft,
   TrendingUp, TrendingDown, Skull, Info, Flame, X, Trophy,
-  Beaker, Microscope, Lock, CheckCircle2, Zap,
+  Beaker, Microscope, Lock, CheckCircle2, Zap, Flag, Handshake,
 } from 'lucide-react'
 
 // ---- Helper Components ----
@@ -1146,6 +1148,159 @@ const NotificationsPanel: React.FC = () => {
   )
 }
 
+// ---- Faction Panel ----
+
+const FactionPanel: React.FC = () => {
+  const { factions, victory } = useGameStore();
+  
+  return (
+    <Card className="bg-card border-[#3d3425]">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-1">
+          <Flag className="w-4 h-4 text-[#d4a843]" /> الفصائل ({factions.length})
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        <ScrollArea className="max-h-40">
+          <div className="space-y-1 px-4 pb-3">
+            {factions.map(faction => {
+              const config = PERSONALITY_CONFIG[faction.personality];
+              return (
+                <div key={faction.id} className="flex items-center justify-between py-2 border-b border-[#2d2619] last:border-0">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: faction.color }} />
+                    <div>
+                      <p className="text-xs font-semibold">{faction.name}</p>
+                      <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                        <span>{config.icon} {config.label}</span>
+                        <span>🏙️ {faction.cityCount}</span>
+                        <span>⚔️ {faction.armyCount}</span>
+                        <span>💰 {faction.treasury}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-left">
+                    <Badge variant="outline" className={`text-[10px] ${
+                      faction.isAtWar ? 'border-red-600 text-red-400' :
+                      faction.diplomaticStatus === DiplomaticStatus.Allied ? 'border-blue-600 text-blue-400' :
+                      faction.diplomaticStatus === DiplomaticStatus.Peace ? 'border-emerald-600 text-emerald-400' :
+                      'border-[#3d3425] text-muted-foreground'
+                    }`}>
+                      {faction.isAtWar ? '⚔️ حرب' : DIPLOMATIC_STATUS_LABELS[faction.diplomaticStatus]}
+                    </Badge>
+                    <p className={`text-[10px] mt-0.5 ${faction.relationWithPlayer >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {faction.relationWithPlayer >= 0 ? '♥' : '💔'} {faction.relationWithPlayer}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </ScrollArea>
+        
+        {/* Victory Progress */}
+        <div className="px-4 pb-3 space-y-2 border-t border-[#2d2619] pt-2">
+          <p className="text-[10px] font-semibold text-muted-foreground">📊 تقدم النصر</p>
+          <div className="space-y-1">
+            {[
+              { label: '⚔️ سيطرة', value: victory.dominationProgress, color: 'bg-red-500' },
+              { label: '📚 حضارة', value: victory.culturalProgress, color: 'bg-blue-500' },
+              { label: '💰 اقتصاد', value: victory.economicProgress, color: 'bg-amber-500' },
+            ].map(item => (
+              <div key={item.label} className="flex items-center gap-2 text-[10px]">
+                <span className="w-16 text-muted-foreground">{item.label}</span>
+                <div className="flex-1 h-1.5 bg-[#2d2619] rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full ${item.color}`} style={{ width: `${item.value}%` }} />
+                </div>
+                <span className="w-8 text-right">{item.value}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+// ---- Diplomacy Modal ----
+
+const DiplomacyModal: React.FC = () => {
+  const showDiplomacyModal = useGameStore(state => state.showDiplomacyModal);
+  const handleDiplomaticChoice = useGameStore(state => state.handleDiplomaticChoice);
+  const dismissDiplomacy = useGameStore(state => state.dismissDiplomacy);
+  const factions = useGameStore(state => state.factions);
+  
+  if (!showDiplomacyModal) return null;
+  
+  const action = showDiplomacyModal;
+  const faction = factions.find(f => f.id === action.factionId);
+  if (!faction) return null;
+  
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+      <Card className="bg-card border-[#3d3425] max-w-md mx-4 w-full">
+        <CardHeader className="text-center pb-3">
+          <div className="flex items-center justify-center gap-2">
+            <div className="w-4 h-4 rounded-full" style={{ backgroundColor: faction.color }} />
+            <CardTitle className="text-lg text-[#d4a843]">{faction.name}</CardTitle>
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">{action.message}</p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {action.effects && action.effects.length > 0 && (
+            <div className="flex flex-wrap gap-2 justify-center">
+              {action.effects.map((eff, i) => (
+                <Badge key={i} variant="outline" className="border-amber-700 text-amber-400">{eff.description}</Badge>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Button onClick={() => handleDiplomaticChoice(action.id, 'accept')} className="flex-1 bg-emerald-700 hover:bg-emerald-600">
+              ✓ قبول
+            </Button>
+            <Button onClick={() => handleDiplomaticChoice(action.id, 'reject')} variant="outline" className="flex-1 border-red-800 text-red-400 hover:bg-red-900/30">
+              ✗ رفض
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+// ---- Victory Screen ----
+
+const VictoryScreen: React.FC = () => {
+  const { victory, showVictoryScreen, dismissVictory } = useGameStore();
+  
+  if (!showVictoryScreen || !victory.victoryAchieved) return null;
+  
+  const isDefeat = victory.victoryType === null;
+  
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60]">
+      <Card className="bg-card border-[#3d3425] max-w-md mx-4 w-full text-center">
+        <CardContent className="py-8 space-y-4">
+          <div className="text-6xl">{isDefeat ? '💀' : '🏆'}</div>
+          <h2 className={`text-2xl font-bold ${isDefeat ? 'text-red-400' : 'text-[#d4a843]'}`}>
+            {isDefeat ? 'هزيمة!' : 'نصر!'}
+          </h2>
+          <p className="text-muted-foreground leading-relaxed">{victory.victoryMessage}</p>
+          {victory.victoryType && (
+            <Badge className="bg-[#d4a843] text-[#1a1410] text-sm px-4 py-1">
+              {victory.victoryType === VictoryType.Domination ? '⚔️ سيطرة' :
+               victory.victoryType === VictoryType.Cultural ? '📚 حضارة' : '💰 اقتصاد'}
+            </Badge>
+          )}
+          <Button onClick={dismissVictory} className="bg-[#d4a843] text-[#1a1410] hover:bg-[#e0b850]">
+            متابعة
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
 // ---- Armies Panel ----
 
 const ArmiesPanel: React.FC = () => {
@@ -1289,6 +1444,8 @@ export default function Home() {
       {/* Modals */}
       <BattleResultModal />
       <RandomEventModal />
+      <DiplomacyModal />
+      <VictoryScreen />
 
       {/* Top Bar */}
       <div className="bg-[#231e16] border-b border-[#3d3425] px-4 py-2">
@@ -1402,6 +1559,7 @@ export default function Home() {
           <div className="space-y-4">
             <CityDetailPanel />
             <TechTreePanel />
+            <FactionPanel />
             <ArmiesPanel />
             <NotificationsPanel />
           </div>
