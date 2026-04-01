@@ -1,69 +1,70 @@
-# Grand Strategy Mobile Game (4X)
+# 🎮 فُتُوح - Grand Strategy Mobile Game (4X)
 
-A 4X Grand Strategy mobile game built with **Unity (C#)** and designed specifically for **Android** devices.
+A 4X Grand Strategy web game built with **Next.js + TypeScript + Tailwind CSS + shadcn/ui**.
 
-## Core Vision
+The player is the **Supreme Commander** who appoints AI-driven governors to manage cities.
 
-The player is the **Supreme Commander** who makes high-level strategic decisions. Instead of micromanaging cities, the player appoints **AI-driven governors** to autonomously manage conquered cities.
+## 🏛️ Implemented Systems
 
-## Phase 1: Core Systems
+### Phase 1: Core Systems
+| System | Description |
+|--------|-------------|
+| 🗺️ Mobile Camera Controls | Touch-based camera (Unity C# code included) |
+| 👥 Population System | Demographics, labor distribution, growth, conscription |
+| 🤖 Governor AI | 3 types: Economic, Military, Defensive with 19 traits |
+| 🏰 Loyalty & Rebellion | Dynamic loyalty with rebellion mechanics |
 
-### Implemented Systems
+### Phase 2: Combat System ⚔️
+| Feature | Description |
+|---------|-------------|
+| Unit Types | Infantry (🗡️), Cavalry (🐎), Archers (🏹) - Rock-Paper-Scissors |
+| Battle Resolution | 4 outcomes: Victory, Defeat, Stalemate, City Captured |
+| Siege Mechanics | Wall degradation, starvation, city capture |
+| Army Experience | Veteran bonuses up to +30% |
+| Battle Report | Detailed narrative log with Arabic text |
 
-| System | File | Description |
-|--------|------|-------------|
-| Mobile Camera Controls | `MobileCameraController.cs` | Touch-based camera: Drag, Pinch-Zoom, Tap |
-| Population System | `PopulationData.cs` + `PopulationManager.cs` | Demographics, labor distribution, growth, conscription |
-| Governor AI | `GovernorAI.cs` | 3 governor types (Economic, Military, Defensive) with traits |
-| Loyalty System | `LoyaltySystem.cs` | Loyalty mechanics, rebellion system, event effects |
-| Player Controller | `PlayerController.cs` | Supreme Commander: assign governors, manage budget, move armies |
-| Resource Manager | `CityResourceManager.cs` | City resource management |
+### Phase 3: Building System 🏗️
+| Building | Icon | Effect | Max Level |
+|----------|------|--------|-----------|
+| مزرعة Farm | 🌾 | +15% food per level | 5 |
+| سوق Market | 🏪 | +20% gold per level | 5 |
+| ثكنة Barracks | ⚔️ | +50 soldier capacity per level | 3 |
+| سور Wall | 🏰 | +15% defense per level | 5 |
+| مسجد Mosque | 🕌 | +8 happiness per level | 3 |
+| مكتبة Library | 📚 | +25% research per level | 3 |
+| منجم Mine | ⛏️ | +20% materials per level | 5 |
+| ورشة Workshop | 🔨 | +20% production (requires Mine) | 3 |
+| مستشفى Hospital | 🏥 | +5% pop growth (requires Mosque) | 3 |
+| خان Caravanserai | 🐪 | +30% gold (requires Market) | 3 |
 
-### Key Features
+## 🕹️ How to Play
+1. Click **"ابدأ الفتوح"** to start
+2. Click a city on the map to view details
+3. Assign a governor to auto-manage the city
+4. Build structures to boost economy and military
+5. Recruit soldiers and create armies
+6. Attack enemy cities for conquest!
+7. Click **"دور تالي"** to advance
 
-- **Touch Controls**: Drag to pan, Pinch to zoom, Tap to select (optimized for Android)
-- **Autonomous AI Governors**: Economic, Military, and Defensive governors with unique behaviors
-- **Trait System**: 20 governor traits (positive/negative) with magnitude scaling
-- **Population Simulation**: Age demographics, labor distribution, conscription mechanics
-- **Loyalty & Rebellion**: Dynamic loyalty affected by taxes, events, and decisions
-- **Event-Driven Architecture**: Decoupled systems communicating via C# events
+## 🛠️ Tech Stack
+- **Framework**: Next.js 16 + TypeScript 5
+- **Styling**: Tailwind CSS 4 + shadcn/ui
+- **State**: Zustand
+- **Map**: HTML5 Canvas
+- **Engine**: Pure functions (no side effects)
 
-### Unity Project Structure
-
+## 📁 Project Structure
 ```
-Assets/Scripts/
-  CameraSystem/
-    MobileCameraController.cs
-  PopulationSystem/
-    PopulationData.cs
-    PopulationManager.cs
-  GovernorSystem/
-    GovernorAI.cs
-  LoyaltySystem/
-    LoyaltySystem.cs
-  PlayerSystem/
-    PlayerController.cs
-  Core/
-    CityResourceManager.cs
-Documentation/
-  GrandStrategy_Game_Documentation.pdf
+src/
+  game/
+    types.ts      # All type definitions
+    engine.ts     # Pure function game engine
+  store/
+    game-store.ts # Zustand state management
+  app/
+    page.tsx      # Full game UI
+  components/ui/  # shadcn/ui components
 ```
 
-## Setup
-
-1. Create a new Unity project (2022.3 LTS or later)
-2. Import the `Assets/Scripts/` folder into your project
-3. Attach `MobileCameraController` to your main camera
-4. Set up the ground layer and camera bounds in the Inspector
-5. Build for Android platform
-
-## Tech Stack
-
-- **Engine**: Unity
-- **Language**: C#
-- **Platform**: Android (Mobile)
-- **Genre**: 4X Grand Strategy
-
-## License
-
-This project is open source and available under the MIT License.
+## 📜 License
+MIT License
