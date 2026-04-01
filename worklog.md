@@ -87,3 +87,34 @@ Build a complete combat and battle system for the 4X Grand Strategy game with ar
 - Added `Trophy` icon import for city captured outcome
 
 All linting passes with zero errors. Dev server running successfully on port 3000.
+
+---
+## Task ID: 3 - Bug Fixes (15 fixes applied)
+### Work Task
+Apply all 15 bug fixes to the 4X Grand Strategy game across engine.ts, game-store.ts, and page.tsx.
+
+### Work Summary
+Applied all 15 bug fixes across 3 files:
+
+**game-store.ts (Fixes 1, 2, 7-caller, 14):**
+- Fix 1: Removed unused `updatePopulationStatus` import (not exported from engine.ts)
+- Fix 2: Fixed inverted research start notification logic (`===` → `!== null`)
+- Fix 7: Updated `endTurn` to destructure `cities` from `processFactionAI` return value
+- Fix 14: Removed unused `FactionPersonality` and `DiplomaticStatus` type imports
+
+**engine.ts (Fixes 3, 4, 5, 6, 7, 8, 12, 15):**
+- Fix 3: Added optional `techBonuses` parameter to `calculateProduction()` with application block
+- Fix 4: Moved `researchPerTurn` calculation before `processResearch()` in `processTurn()`
+- Fix 5: Reset `showBattleResult` to `null` at start of `processTurn()`
+- Fix 6: Changed research completion notification turn from `state.turn` to `state.turn + 1`
+- Fix 7: Implemented actual war damage in `processFactionAI()` - reduces soldier count (2-5) and happiness (3-5), updated return type to include `cities`
+- Fix 8: Added soft cap for faction army power (decay at >500)
+- Fix 12: Removed unused `totalSoldiers` variable in `runGovernorAI()`
+- Fix 15: Removed dead `happiness_flat` initialization and merge code in `getBuildingBonuses()`
+
+**page.tsx (Fixes 9, 10, 11):**
+- Fix 9: Fixed VictoryScreen visibility - added `showVictoryScreen` selector and `!showVictoryScreen` guard on gameOver check
+- Fix 10: Fixed dynamic Tailwind classes - replaced template literal with ternary for complete class names
+- Fix 11: Fixed terrain dot flickering - stored dots in `useRef` instead of regenerating each render
+
+Build passes successfully with zero lint errors. Dev server returns 200.

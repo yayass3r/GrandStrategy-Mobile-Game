@@ -7,7 +7,7 @@ import {
   GameState, City, Army, GovernorData, GovernorType,
   GameNotification, BattleResult, BuildingType,
   TechId, EventNotification,
-  Faction, DiplomaticAction, VictoryState, FactionPersonality, DiplomaticStatus,
+  Faction, DiplomaticAction, VictoryState,
 } from '@/game/types';
 import {
   generateWorld, processTurn, createGovernor as engineCreateGovernor,
@@ -16,8 +16,7 @@ import {
   createArmy as engineCreateArmy,
   generateAvailableGovernors as engineGenerateAvailableGovernors,
   calculateBudget,
-  updatePopulationStatus,
- createDefaultComposition,
+  createDefaultComposition,
   startBuilding as engineStartBuilding,
   startResearch as engineStartResearch,
   applyEventEffects as engineApplyEventEffects,
@@ -150,8 +149,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     // Process faction AI
-    const { factions: updatedFactions, notifications: factionNotifs, diplomaticActions } = processFactionAI(newState);
-    newState = { ...newState, factions: updatedFactions, notifications: [...factionNotifs, ...newState.notifications].slice(0, 50) };
+    const { factions: updatedFactions, notifications: factionNotifs, diplomaticActions, cities: factionCities } = processFactionAI(newState);
+    newState = { ...newState, factions: updatedFactions, cities: factionCities, notifications: [...factionNotifs, ...newState.notifications].slice(0, 50) };
 
     // Calculate victory progress
     const victory = calculateVictoryProgress(newState);
@@ -192,7 +191,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set(state => {
       if (state.currentResearch !== null) return state;
       const newState = engineStartResearch(state, techId);
-      if (newState.currentResearch === state.currentResearch && newState.currentResearch?.techId === techId) {
+      if (newState.currentResearch !== null && newState.currentResearch?.techId === techId) {
         // Research was started successfully
         return {
           ...newState,

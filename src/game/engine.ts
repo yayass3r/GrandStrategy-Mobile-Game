@@ -231,7 +231,7 @@ export function updatePopulationGrowth(city: City): City {
 
 // ---- Production Calculation ----
 
-export function calculateProduction(city: City): CityProduction {
+export function calculateProduction(city: City, techBonuses?: Record<string, number>): CityProduction {
   const multiplier = HAPPINESS_MULTIPLIER[city.status];
   const totalPop = getTotalPopulation(city.population);
   const foodConsumption = totalPop * 1.0;
@@ -271,6 +271,15 @@ export function calculateProduction(city: City): CityProduction {
   materials *= (1 + (bonuses.materials_percent || 0) / 100);
   research *= (1 + (bonuses.research_percent || 0) / 100);
 
+  // Apply tech bonuses
+  if (techBonuses) {
+    food *= (1 + (techBonuses.food_percent || 0) / 100);
+    gold *= (1 + (techBonuses.gold_percent || 0) / 100);
+    production *= (1 + (techBonuses.production_percent || 0) / 100);
+    materials *= (1 + (techBonuses.materials_percent || 0) / 100);
+    research *= (1 + (techBonuses.research_percent || 0) / 100);
+  }
+
   // Religion provides happiness bonus
   const religionWorkers = city.labor.religion;
   const buildingHappiness = bonuses.happiness || 0;
@@ -306,8 +315,6 @@ export function runGovernorAI(city: City): City {
 
   const governor = { ...city.governor, turnsInOffice: city.governor.turnsInOffice + 1 };
   const adultWorkers = city.population.adults;
-  const totalSoldiers = city.soldierCount;
-
   // Determine labor priorities based on governor type
   let farmingW = 3.0;
   let commerceW = 2.0;
@@ -866,7 +873,7 @@ export function processTurn(state: GameState): GameState {
     notifications,
     battleHistory: state.battleHistory || [],
     activeSieges: state.activeSieges || [],
-    showBattleResult: state.showBattleResult,
+    showBattleResult: null,
   };
   const { state: armyState, battles } = advanceArmies(newState);
   newState = armyState;
@@ -919,19 +926,20 @@ export function processTurn(state: GameState): GameState {
     armies: newState.armies.filter(a => a.soldierCount > 0),
   };
 
-  // 7. Process research
-  newState = processResearch(newState);
-
-  // 8. Calculate research per turn
+  // 7. Calculate research per turn first
+  const techBonuses = getTechBonuses(newState);
   const researchPerTurn = newState.cities.reduce((sum, city) => {
-    const prod = calculateProduction(city);
+    const prod = calculateProduction(city, techBonuses);
     return sum + prod.research;
   }, 0);
+  newState = { ...newState, researchPerTurn };
+
+  // 8. Process research (now uses correct researchPerTurn)
+  newState = processResearch(newState);
 
   // 9. Process random events
   const { state: eventState, eventNotification } = processRandomEvents(newState);
   newState = eventState;
-  newState = { ...newState, researchPerTurn };
 
   // Add event notification
   if (eventNotification) {
@@ -1254,7 +1262,7 @@ export function processResearch(state: GameState): GameState {
 
     const notification: GameNotification = {
       id: uuid(),
-      turn: state.turn,
+      turn: state.turn + 1,
       message: `🔬 تم البحث عن: ${tech.icon} ${tech.name}! ${tech.effects.map(e => e.description).join(', ')}`,
       category: 'economic',
       timestamp: Date.now(),
@@ -1575,7 +1583,7 @@ export function processBuildings(city: City): City {
 export function getBuildingBonuses(city: City): Record<string, number> {
   const bonuses: Record<string, number> = {
     food_percent: 0, gold_percent: 0, production_percent: 0, materials_percent: 0,
-    research_percent: 0, happiness_flat: 0, happiness: 0,
+    research_percent: 0, happiness: 0,
     population_growth_percent: 0, defense_percent: 0, soldier_capacity: 0,
   };
 
@@ -1593,11 +1601,6 @@ export function getBuildingBonuses(city: City): Record<string, number> {
         bonuses[effect.type] = (bonuses[effect.type] || 0) + value;
       }
     }
-  }
-
-  // Merge flat happiness into happiness key
-  if (bonuses.happiness_flat > 0) {
-    bonuses.happiness = (bonuses.happiness || 0) + bonuses.happiness_flat;
   }
 
   return bonuses;
@@ -1780,10 +1783,11 @@ export function generateFactions(cities: City[]): Faction[] {
   return factions;
 }
 
-export function processFactionAI(state: GameState): { factions: Faction[]; notifications: GameNotification[]; diplomaticActions: DiplomaticAction[] } {
+export function processFactionAI(state: GameState): { factions: Faction[]; notifications: GameNotification[]; diplomaticActions: DiplomaticAction[]; cities: City[] } {
   let factions = state.factions.map(f => ({ ...f, turnsSinceLastAction: f.turnsSinceLastAction + 1 }));
   const notifications: GameNotification[] = [];
   const diplomaticActions: DiplomaticAction[] = [];
+  let modifiedCities = [...state.cities];
   
   for (const faction of factions) {
     const config = PERSONALITY_CONFIG[faction.personality];
@@ -1791,6 +1795,10 @@ export function processFactionAI(state: GameState): { factions: Faction[]; notif
     // Grow faction power each turn
     const growthRate = 0.02 + config.econBonus / 200;
     faction.armyPower = Math.floor(faction.armyPower * (1 + growthRate));
+    // Soft cap: decay growth rate as power increases
+    if (faction.armyPower > 500) {
+      faction.armyPower = Math.floor(faction.armyPower * 0.98);
+    }
     faction.armyCount = Math.floor(faction.armyPower / 10);
     faction.treasury += Math.floor(faction.cityCount * 5 * (1 + config.econBonus / 100));
     faction.researchedTechCount += Math.random() < 0.1 ? 1 : 0;
@@ -1830,13 +1838,20 @@ export function processFactionAI(state: GameState): { factions: Faction[]; notif
     
     // War damage: AI at war may damage player cities
     if (faction.isAtWar && Math.random() < 0.15) {
-      const playerCities = state.cities;
-      if (playerCities.length > 0) {
-        const targetCity = playerCities[Math.floor(Math.random() * playerCities.length)];
+      if (modifiedCities.length > 0) {
+        const targetIdx = Math.floor(Math.random() * modifiedCities.length);
+        const targetCity = modifiedCities[targetIdx];
+        const soldierLoss = rand(2, 5);
+        const happinessLoss = rand(3, 5);
+        modifiedCities[targetIdx] = {
+          ...targetCity,
+          soldierCount: Math.max(0, targetCity.soldierCount - soldierLoss),
+          happiness: Math.max(0, targetCity.happiness - happinessLoss),
+        };
         notifications.push({
           id: uuid(),
           turn: state.turn + 1,
-          message: `🗡️ جيش ${faction.name} يهاجم ${targetCity.name}! خسائر في الحامية`,
+          message: `🗡️ جيش ${faction.name} يهاجم ${targetCity.name}! خسائر: -${soldierLoss} جندي، -${happinessLoss} سعادة`,
           category: 'military',
           timestamp: Date.now(),
         });
@@ -1862,7 +1877,7 @@ export function processFactionAI(state: GameState): { factions: Faction[]; notif
     }
   }
   
-  return { factions, notifications, diplomaticActions };
+  return { factions, notifications, diplomaticActions, cities: modifiedCities };
 }
 
 export function handleDiplomaticAction(state: GameState, actionId: string, choiceId: string): GameState {

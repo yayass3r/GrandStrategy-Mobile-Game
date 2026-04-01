@@ -201,7 +201,7 @@ const BattleResultModal: React.FC = () => {
               </Badge>
             )}
             {result.defenderCityLoyaltyDrop !== 0 && (
-              <Badge variant="outline" className={`border-${result.defenderCityLoyaltyDrop > 0 ? 'emerald' : 'red'}-700 text-${result.defenderCityLoyaltyDrop > 0 ? 'emerald' : 'red'}-400`}>
+              <Badge variant="outline" className={result.defenderCityLoyaltyDrop > 0 ? 'border-emerald-700 text-emerald-400' : 'border-red-700 text-red-400'}>
                 ♥ ولاء: {result.defenderCityLoyaltyDrop > 0 ? '+' : ''}{result.defenderCityLoyaltyDrop}
               </Badge>
             )}
@@ -493,6 +493,7 @@ const TechTreePanel: React.FC = () => {
 
 const GameMap: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const terrainDotsRef = useRef<{x: number; y: number}[]>([])
   const {
     cities, armies, selectedCityId, selectCity,
     gameStarted,
@@ -549,12 +550,18 @@ const GameMap: React.FC = () => {
     }
 
     // Draw terrain texture (desert dots)
+    if (terrainDotsRef.current.length === 0) {
+      for (let i = 0; i < 200; i++) {
+        terrainDotsRef.current.push({
+          x: Math.random() * canvasWidth,
+          y: Math.random() * canvasHeight,
+        })
+      }
+    }
     ctx.fillStyle = '#2a2215'
-    for (let i = 0; i < 200; i++) {
-      const tx = Math.random() * canvasWidth
-      const ty = Math.random() * canvasHeight
+    for (const dot of terrainDotsRef.current) {
       ctx.beginPath()
-      ctx.arc(tx, ty, 1, 0, Math.PI * 2)
+      ctx.arc(dot.x, dot.y, 1, 0, Math.PI * 2)
       ctx.fill()
     }
 
@@ -1432,9 +1439,10 @@ export default function Home() {
     cities, gameStarted, gameOver, setTaxRate, endTurn,
     researchedTechs,
   } = useGameStore()
+  const showVictoryScreen = useGameStore(state => state.showVictoryScreen);
 
   if (!gameStarted) return <TitleScreen />
-  if (gameOver) return <GameOverScreen />
+  if (gameOver && !showVictoryScreen) return <GameOverScreen />
 
   const totalPop = cities.reduce((s, c) => s + c.population.children + c.population.adults + c.population.elderly, 0)
   const totalSoldiers = cities.reduce((s, c) => s + c.soldierCount, 0)
